@@ -1,0 +1,1704 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>人工衛星シミュレーター ― 静止衛星の軌道を探せ！</title>
+  <style>
+    :root {
+      --bg-space: #05070e;
+      --panel-bg: rgba(20, 25, 38, 0.94);
+      --panel-border: rgba(140, 170, 220, 0.35);
+      --text-main: #f0f4ff;
+      --text-muted: #9aa8c7;
+      --color-gravity: #3b9eff;
+      --color-velocity: #38e54d;
+      --color-period: #ffbe3b;
+      --color-geo: #00f2fe;
+      --color-gold: #ffd700;
+      --color-danger: #ff6b6b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    html, body {
+      background-color: var(--bg-space);
+      color: var(--text-main);
+      font-family: "Hiragino Kaku Gothic ProN", "Meiryo", "Noto Sans JP", sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Main Layout */
+    .simulator-container {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* Space Canvas Area */
+    .canvas-wrapper {
+      position: relative;
+      flex: 1;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(circle at center, #0c1428 0%, #05070e 70%, #020307 100%);
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+
+    /* PhET-style Top-Left Zoom Control */
+    .zoom-control {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      background: rgba(15, 20, 32, 0.85);
+      border: 1.5px solid var(--panel-border);
+      border-radius: 10px;
+      padding: 8px 7px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
+      z-index: 10;
+    }
+
+    .zoom-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      background: linear-gradient(180deg, #eef4ff 0%, #b8c7e0 100%);
+      color: #1a2333;
+      font-size: 18px;
+      font-weight: bold;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.1s, filter 0.15s;
+    }
+
+    .zoom-btn:hover {
+      filter: brightness(1.08);
+    }
+
+    .zoom-btn:active {
+      transform: scale(0.94);
+    }
+
+    .zoom-slider-wrap {
+      height: 95px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .zoom-slider {
+      writing-mode: bt-lr;
+      -webkit-appearance: slider-vertical;
+      width: 8px;
+      height: 85px;
+      cursor: pointer;
+      accent-color: #7ab8ff;
+    }
+
+    /* Top Instruction & Target Banner */
+    .mission-hud {
+      position: absolute;
+      top: 12px;
+      left: 72px;
+      right: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      pointer-events: none;
+      z-index: 10;
+      gap: 6px;
+    }
+
+    .period-indicator-card {
+      pointer-events: auto;
+      background: rgba(16, 22, 36, 0.92);
+      border: 2px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 8px 16px;
+      min-width: 300px;
+      max-width: 560px;
+      width: 92%;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.65);
+      transition: border-color 0.3s, box-shadow 0.3s, transform 0.25s;
+    }
+
+    .period-indicator-card.geo-achieved {
+      border-color: var(--color-gold);
+      box-shadow: 0 0 28px rgba(255, 215, 0, 0.45), inset 0 0 15px rgba(255, 215, 0, 0.12);
+    }
+
+    .period-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 4px;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .period-title {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .period-values {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+
+    .current-period-num {
+      font-size: 21px;
+      font-weight: 800;
+      color: var(--color-period);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .period-indicator-card.geo-achieved .current-period-num {
+      color: var(--color-gold);
+      text-shadow: 0 0 10px rgba(255, 215, 0, 0.6);
+    }
+
+    .target-period-badge {
+      font-size: 11px;
+      background: rgba(255, 255, 255, 0.1);
+      padding: 2px 8px;
+      border-radius: 999px;
+      color: #d7e3fc;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    /* Period Alignment Meter */
+    .meter-track {
+      position: relative;
+      height: 15px;
+      background: linear-gradient(90deg,
+        rgba(255, 107, 107, 0.28) 0%,
+        rgba(255, 190, 59, 0.3) 42%,
+        rgba(0, 242, 254, 0.45) 50%,
+        rgba(255, 190, 59, 0.3) 58%,
+        rgba(147, 112, 219, 0.28) 100%
+      );
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      overflow: hidden;
+    }
+
+    .meter-center-mark {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      transform: translateX(-50%);
+      background: var(--color-gold);
+      box-shadow: 0 0 8px var(--color-gold);
+      z-index: 2;
+    }
+
+    .meter-pointer {
+      position: absolute;
+      top: 1px;
+      bottom: 1px;
+      width: 13px;
+      border-radius: 7px;
+      background: #ffffff;
+      border: 2px solid #1a2333;
+      transform: translateX(-50%);
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.9);
+      transition: background-color 0.2s;
+      z-index: 3;
+    }
+
+    .period-indicator-card.geo-achieved .meter-pointer {
+      background: var(--color-gold);
+      box-shadow: 0 0 14px var(--color-gold);
+    }
+
+    .meter-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10.5px;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    .meter-labels .center-label {
+      color: var(--color-gold);
+      font-weight: bold;
+    }
+
+    /* Geostationary Achievement Banner */
+    .geo-achievement-banner {
+      pointer-events: auto;
+      background: linear-gradient(135deg, rgba(255, 215, 0, 0.95) 0%, rgba(255, 165, 0, 0.95) 100%);
+      color: #101520;
+      padding: 6px 16px;
+      border-radius: 999px;
+      font-weight: 800;
+      font-size: 13.5px;
+      letter-spacing: 0.02em;
+      box-shadow: 0 0 30px rgba(255, 215, 0, 0.75);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      opacity: 0;
+      transform: translateY(-10px) scale(0.92);
+      transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+    }
+
+    .geo-achievement-banner.visible {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+
+    /* Right Control Panel (Fits iPad without scrolling) */
+    .control-panel {
+      width: 325px;
+      height: 100%;
+      background: var(--panel-bg);
+      border-left: 2px solid var(--panel-border);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 8px;
+      overflow: hidden;
+      z-index: 20;
+      box-shadow: -6px 0 24px rgba(0, 0, 0, 0.6);
+    }
+
+    .panel-box {
+      background: rgba(10, 14, 24, 0.72);
+      border: 1.5px solid var(--panel-border);
+      border-radius: 10px;
+      padding: 8px 11px;
+    }
+
+    .panel-box-title {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #cfe0ff;
+      margin-bottom: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Distance Control Slider & Fine Tune */
+    .distance-readout-main {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 2px;
+    }
+
+    .distance-val-big {
+      font-size: 19px;
+      font-weight: 800;
+      color: #ffffff;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .distance-sub-info {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      margin-bottom: 5px;
+    }
+
+    .radius-slider {
+      width: 100%;
+      height: 7px;
+      cursor: pointer;
+      accent-color: #4facfe;
+      margin: 4px 0;
+    }
+
+    .slider-ticks {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10.5px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .fine-tune-row {
+      display: flex;
+      gap: 5px;
+      justify-content: space-between;
+    }
+
+    .tune-btn {
+      flex: 1;
+      padding: 5px 3px;
+      font-size: 11.5px;
+      font-weight: 700;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      background: rgba(255, 255, 255, 0.09);
+      color: var(--text-main);
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    .tune-btn:hover {
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    .tune-btn:active {
+      transform: scale(0.96);
+    }
+
+    /* Physics Telemetry Cards (Gravity, Velocity, Period) */
+    .telemetry-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .telemetry-item {
+      background: rgba(255, 255, 255, 0.04);
+      border-radius: 7px;
+      padding: 6px 9px;
+      border-left: 4px solid transparent;
+    }
+
+    .telemetry-item.gravity {
+      border-left-color: var(--color-gravity);
+    }
+
+    .telemetry-item.velocity {
+      border-left-color: var(--color-velocity);
+    }
+
+    .telemetry-item.period {
+      border-left-color: var(--color-period);
+    }
+
+    .telemetry-row-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 2px;
+    }
+
+    .telemetry-label {
+      font-size: 11.5px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .telemetry-value {
+      font-size: 14.5px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .telemetry-formula {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .bar-bg {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.08s linear;
+    }
+
+    /* PhET-style Checkboxes for Vectors & Overlays */
+    .checkbox-list {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .checkbox-row input[type="checkbox"] {
+      width: 15px;
+      height: 15px;
+      cursor: pointer;
+      accent-color: #3b9eff;
+    }
+
+    .arrow-icon {
+      display: inline-flex;
+      align-items: center;
+      margin-left: 2px;
+    }
+
+    /* Relation Hint Box */
+    .hint-box {
+      font-size: 11px;
+      line-height: 1.42;
+      color: #d6e4ff;
+      background: rgba(59, 158, 255, 0.1);
+      border: 1px solid rgba(59, 158, 255, 0.35);
+      border-radius: 8px;
+      padding: 7px 9px;
+    }
+
+    .hint-box strong {
+      color: var(--color-gold);
+    }
+
+    /* Bottom Playback Bar */
+    .bottom-bar {
+      position: absolute;
+      bottom: 14px;
+      left: 16px;
+      right: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      pointer-events: none;
+      z-index: 15;
+    }
+
+    .speed-group {
+      pointer-events: auto;
+      background: rgba(15, 20, 32, 0.88);
+      border: 1.5px solid var(--panel-border);
+      border-radius: 10px;
+      padding: 7px 11px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .radio-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12.5px;
+      cursor: pointer;
+    }
+
+    .radio-row input[type="radio"] {
+      accent-color: #5cb3ff;
+      width: 14px;
+      height: 14px;
+      cursor: pointer;
+    }
+
+    .play-btn {
+      pointer-events: auto;
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
+      border: 2px solid #d4e8ff;
+      background: radial-gradient(circle at 35% 30%, #9ad0ff, #478de0);
+      color: #091224;
+      font-size: 22px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.65);
+      transition: transform 0.12s, filter 0.15s;
+    }
+
+    .play-btn:hover {
+      filter: brightness(1.1);
+    }
+
+    .play-btn:active {
+      transform: scale(0.93);
+    }
+
+    .reset-all-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 2px solid #ffd29d;
+      background: radial-gradient(circle at 35% 30%, #ffae42, #d96b00);
+      color: #fff;
+      font-size: 22px;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
+      pointer-events: auto;
+      transition: transform 0.12s;
+    }
+
+    .reset-all-btn:hover {
+      filter: brightness(1.08);
+    }
+
+    .reset-all-btn:active {
+      transform: scale(0.92);
+    }
+
+    /* Compact adjustments for smaller iPad / tablet heights */
+    @media (max-height: 740px) {
+      .control-panel {
+        padding: 7px 10px;
+        gap: 5px;
+      }
+      .panel-box {
+        padding: 6px 9px;
+      }
+      .telemetry-list {
+        gap: 4px;
+      }
+      .telemetry-item {
+        padding: 4px 8px;
+      }
+      .hint-box {
+        font-size: 10.5px;
+        padding: 5px 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="simulator-container">
+    <!-- Left/Main Interactive Space Canvas -->
+    <div class="canvas-wrapper" id="canvasWrapper">
+      <canvas id="simCanvas"></canvas>
+
+      <!-- PhET-style Zoom Controls -->
+      <div class="zoom-control" title="表示倍率の変更">
+        <button class="zoom-btn" id="zoomInBtn" aria-label="拡大">＋</button>
+        <div class="zoom-slider-wrap">
+          <input type="range" id="zoomSlider" class="zoom-slider" min="0.45" max="2.2" step="0.05" value="1.0" />
+        </div>
+        <button class="zoom-btn" id="zoomOutBtn" aria-label="縮小">－</button>
+      </div>
+
+      <!-- Top Period Indicator & Achievement Banner -->
+      <div class="mission-hud">
+        <div class="period-indicator-card" id="periodCard">
+          <div class="period-header">
+            <span class="period-title">人工衛星の円運動の周期 T</span>
+            <div class="period-values">
+              <span class="current-period-num" id="hudPeriodText">24.0 時間</span>
+              <span class="target-period-badge">静止衛星の条件：周期 = 24.0 時間</span>
+            </div>
+          </div>
+          <div class="meter-track">
+            <div class="meter-center-mark" title="24.0時間（静止衛星）"></div>
+            <div class="meter-pointer" id="meterPointer" style="left: 50%;"></div>
+          </div>
+          <div class="meter-labels">
+            <span>◀ 周期が短い（地球に近すぎる）</span>
+            <span class="center-label">▲ 24.0 時間（静止軌道）</span>
+            <span>周期が長い（地球から遠すぎる） ▶</span>
+          </div>
+        </div>
+
+        <div class="geo-achievement-banner" id="geoBanner">
+          <span>★ 静止衛星達成！ 地球からの距離 r ≈ 42,164 km（高度 約35,786 km）で周期が 24.0 時間になります ★</span>
+        </div>
+      </div>
+
+      <!-- Bottom Playback Controls (Speed + Play/Pause Button Only + Reset) -->
+      <div class="bottom-bar">
+        <div class="speed-group">
+          <label class="radio-row">
+            <input type="radio" name="simSpeed" value="2.5" />
+            <span>速い</span>
+          </label>
+          <label class="radio-row">
+            <input type="radio" name="simSpeed" value="1.0" checked />
+            <span>再生（標準）</span>
+          </label>
+          <label class="radio-row">
+            <input type="radio" name="simSpeed" value="0.25" />
+            <span>スロー再生</span>
+          </label>
+        </div>
+
+        <button class="play-btn" id="playPauseBtn" title="再生 / 一時停止">⏸</button>
+
+        <button class="reset-all-btn" id="resetAllBtn" title="初期状態にリセット">↻</button>
+      </div>
+    </div>
+
+    <!-- Right Control Panel -->
+    <aside class="control-panel">
+      <!-- 1. Distance Parameter Control -->
+      <div class="panel-box">
+        <div class="panel-box-title">
+          <span>🛰️ 地球と人工衛星の距離（パラメータ）</span>
+        </div>
+        <div class="distance-readout-main">
+          <span style="font-size: 11.5px; color: var(--text-muted);">軌道半径 r (地球中心から)</span>
+          <span class="distance-val-big" id="radiusKmText">20,000 km</span>
+        </div>
+        <div class="distance-sub-info">
+          <span id="altitudeKmText">地表からの高度 h: 13,622 km</span>
+        </div>
+
+        <input
+          type="range"
+          id="radiusSlider"
+          class="radius-slider"
+          min="7000"
+          max="65000"
+          step="10"
+          value="20000"
+        />
+        <div class="slider-ticks">
+          <span>近い (7,000 km)</span>
+          <span>遠い (65,000 km)</span>
+        </div>
+
+        <div class="fine-tune-row">
+          <button class="tune-btn" data-delta="-500">-500 km</button>
+          <button class="tune-btn" data-delta="-50">-50 km</button>
+          <button class="tune-btn" data-delta="50">+50 km</button>
+          <button class="tune-btn" data-delta="500">+500 km</button>
+        </div>
+      </div>
+
+      <!-- 2. Physics Quantities (F, v, T) -->
+      <div class="panel-box">
+        <div class="panel-box-title">
+          <span>📊 距離 r で決まる物理量（等速円運動）</span>
+        </div>
+        <div class="telemetry-list">
+          <!-- Gravitational Force -->
+          <div class="telemetry-item gravity">
+            <div class="telemetry-row-top">
+              <span class="telemetry-label" style="color: var(--color-gravity);">
+                ● 万有引力の大きさ F
+              </span>
+              <span class="telemetry-value" id="gravityValueText" style="color: var(--color-gravity);">997 N</span>
+            </div>
+            <div class="telemetry-formula">F = GMm / r²</div>
+            <div class="bar-bg">
+              <div class="bar-fill" id="gravityBar" style="width: 30%; background: var(--color-gravity);"></div>
+            </div>
+          </div>
+
+          <!-- Tangential Speed (Auto-adjusted for circular orbit) -->
+          <div class="telemetry-item velocity">
+            <div class="telemetry-row-top">
+              <span class="telemetry-label" style="color: var(--color-velocity);">
+                ● 円運動の速さ v（自動調整）
+              </span>
+              <span class="telemetry-value" id="velocityValueText" style="color: var(--color-velocity);">4.46 km/s</span>
+            </div>
+            <div class="telemetry-formula">v = √(GM / r)</div>
+            <div class="bar-bg">
+              <div class="bar-fill" id="velocityBar" style="width: 55%; background: var(--color-velocity);"></div>
+            </div>
+          </div>
+
+          <!-- Orbital Period -->
+          <div class="telemetry-item period">
+            <div class="telemetry-row-top">
+              <span class="telemetry-label" style="color: var(--color-period);">
+                ● 円運動の周期 T
+              </span>
+              <span class="telemetry-value" id="periodValueText" style="color: var(--color-period);">7.81 時間</span>
+            </div>
+            <div class="telemetry-formula">T = 2πr / v</div>
+            <div class="bar-bg">
+              <div class="bar-fill" id="periodBar" style="width: 25%; background: var(--color-period);"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Display Checkboxes (PhET style) -->
+      <div class="panel-box">
+        <div class="panel-box-title">
+          <span>👁️ 表示オプション</span>
+        </div>
+        <div class="checkbox-list">
+          <label class="checkbox-row">
+            <input type="checkbox" id="chkGravity" checked />
+            <span>万有引力（重力）ベクトル</span>
+            <span class="arrow-icon">
+              <svg width="34" height="12" viewBox="0 0 34 12">
+                <line x1="2" y1="6" x2="26" y2="6" stroke="#3b9eff" stroke-width="3" />
+                <polygon points="24,1 33,6 24,11" fill="#3b9eff" />
+              </svg>
+            </span>
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" id="chkVelocity" checked />
+            <span>速度ベクトル（接線方向）</span>
+            <span class="arrow-icon">
+              <svg width="34" height="12" viewBox="0 0 34 12">
+                <line x1="2" y1="6" x2="26" y2="6" stroke="#38e54d" stroke-width="3" />
+                <polygon points="24,1 33,6 24,11" fill="#38e54d" />
+              </svg>
+            </span>
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" id="chkPath" checked />
+            <span>円軌道の経路 ◯</span>
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" id="chkGrid" />
+            <span>グリッド（10,000 km 間隔） ⊞</span>
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" id="chkGeoGuide" />
+            <span>周期24時間の目標リング（ヒント）</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- 4. Pedagogical Point -->
+      <div class="hint-box">
+        💡 <strong>考えてみよう：</strong><br />
+        距離 <i>r</i> を大きくすると、万有引力 <i>F</i> が弱まるため、等速円運動に必要な速さ <i>v</i> は<strong>小さく</strong>なり、1周の道のり 2π<i>r</i> は<strong>長く</strong>なります。<br />
+        そのため、周期がちょうど <strong>24.0 時間</strong> になる距離 <i>r</i> は<strong>ただ1つの値</strong>に決まります！
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    (() => {
+      // =========================================================
+      // Physics Constants & Configuration
+      // =========================================================
+      const EARTH_RADIUS_KM = 6378;       // 地球半径 R_E [km]
+      const GEO_RADIUS_KM = 42164;        // 静止軌道半径 r_GEO [km] (高度 35,786 km)
+      const GEO_PERIOD_HOURS = 24.0;      // 静止衛星の周期 24.0 時間
+      const SAT_MASS_KG = 1000;           // 人工衛星の基準質量 m = 1,000 kg (万有引力 N 表示用)
+      const SURFACE_GRAVITY = 9.80665;    // 地表の重力加速度 g [m/s^2]
+
+      // r = 42,164 km のときちょうど T = 24.00 時間になるよう GM を整合させる
+      const T_GEO_SEC = GEO_PERIOD_HOURS * 3600;
+      const GM_KM3_S2 = (4 * Math.PI * Math.PI * Math.pow(GEO_RADIUS_KM, 3)) / (T_GEO_SEC * T_GEO_SEC);
+
+      const MIN_RADIUS_KM = 7000;
+      const MAX_RADIUS_KM = 65000;
+      const INITIAL_RADIUS_KM = 20000;    // 初期状態は 20,000 km からスタート
+
+      // 静止軌道達成とみなす許容範囲
+      const GEO_TOLERANCE_KM = 75;
+
+      // =========================================================
+      // State
+      // =========================================================
+      const state = {
+        radiusKm: INITIAL_RADIUS_KM,
+        angleRad: -Math.PI / 4,
+        earthAngleRad: -Math.PI / 4,
+        isPlaying: true,
+        simSpeedMultiplier: 1.0,
+        zoom: 1.0,
+        isDraggingSat: false,
+        showGravity: true,
+        showVelocity: true,
+        showPath: true,
+        showGrid: false,
+        showGeoGuide: false,
+        pulsePhase: 0,
+        celebrationParticles: [],
+        wasGeoAchieved: false
+      };
+
+      // =========================================================
+      // DOM Elements
+      // =========================================================
+      const canvas = document.getElementById('simCanvas');
+      const ctx = canvas.getContext('2d');
+      const radiusSlider = document.getElementById('radiusSlider');
+      const zoomSlider = document.getElementById('zoomSlider');
+      const zoomInBtn = document.getElementById('zoomInBtn');
+      const zoomOutBtn = document.getElementById('zoomOutBtn');
+
+      const hudPeriodText = document.getElementById('hudPeriodText');
+      const periodCard = document.getElementById('periodCard');
+      const meterPointer = document.getElementById('meterPointer');
+      const geoBanner = document.getElementById('geoBanner');
+
+      const radiusKmText = document.getElementById('radiusKmText');
+      const altitudeKmText = document.getElementById('altitudeKmText');
+
+      const gravityValueText = document.getElementById('gravityValueText');
+      const gravityBar = document.getElementById('gravityBar');
+
+      const velocityValueText = document.getElementById('velocityValueText');
+      const velocityBar = document.getElementById('velocityBar');
+
+      const periodValueText = document.getElementById('periodValueText');
+      const periodBar = document.getElementById('periodBar');
+
+      const playPauseBtn = document.getElementById('playPauseBtn');
+      const resetAllBtn = document.getElementById('resetAllBtn');
+
+      // Stars background cache
+      const stars = [];
+      for (let i = 0; i < 180; i++) {
+        stars.push({
+          xRatio: Math.random(),
+          yRatio: Math.random(),
+          size: Math.random() * 1.6 + 0.4,
+          alpha: Math.random() * 0.65 + 0.2
+        });
+      }
+
+      // =========================================================
+      // Physics Calculations
+      // =========================================================
+      function computePhysics(rKm) {
+        const periodHours = GEO_PERIOD_HOURS * Math.pow(rKm / GEO_RADIUS_KM, 1.5);
+        const speedKms = Math.sqrt(GM_KM3_S2 / rKm);
+        const ratioToEarthRadius = EARTH_RADIUS_KM / rKm;
+        const gRatio = ratioToEarthRadius * ratioToEarthRadius;
+        const forceNewton = SAT_MASS_KG * SURFACE_GRAVITY * gRatio;
+        const isGeo = Math.abs(rKm - GEO_RADIUS_KM) <= GEO_TOLERANCE_KM;
+
+        return {
+          rKm,
+          altitudeKm: rKm - EARTH_RADIUS_KM,
+          periodHours,
+          speedKms,
+          forceNewton,
+          isGeo
+        };
+      }
+
+      // =========================================================
+      // Coordinate Conversion (km <-> Canvas pixels)
+      // =========================================================
+      function getScalePxPerKm() {
+        const minDim = Math.min(canvas.width, canvas.height);
+        const baseScale = (minDim * 0.43) / 50000;
+        return baseScale * state.zoom;
+      }
+
+      function getCenter() {
+        return {
+          cx: canvas.width * 0.5,
+          cy: canvas.height * 0.5
+        };
+      }
+
+      // =========================================================
+      // Celebration Particles when hitting Geostationary Orbit
+      // =========================================================
+      function spawnCelebrationParticles(satX, satY) {
+        for (let i = 0; i < 28; i++) {
+          const angle = (Math.PI * 2 * i) / 28 + (Math.random() - 0.5) * 0.2;
+          const speed = 1.5 + Math.random() * 3.2;
+          state.celebrationParticles.push({
+            x: satX,
+            y: satY,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            life: 1.0,
+            color: i % 2 === 0 ? '#ffd700' : '#00f2fe'
+          });
+        }
+      }
+
+      // =========================================================
+      // Update UI Readouts
+      // =========================================================
+      function updateUI() {
+        const phys = computePhysics(state.radiusKm);
+
+        // Slider sync
+        radiusSlider.value = Math.round(state.radiusKm);
+
+        // Distance readouts
+        radiusKmText.textContent = `${Math.round(phys.rKm).toLocaleString()} km`;
+        altitudeKmText.textContent = `地表からの高度 h: ${Math.round(phys.altitudeKm).toLocaleString()} km`;
+
+        // Gravity readouts
+        gravityValueText.textContent = `${phys.forceNewton < 100 ? phys.forceNewton.toFixed(1) : Math.round(phys.forceNewton).toLocaleString()} N`;
+        const maxForce = SAT_MASS_KG * SURFACE_GRAVITY * Math.pow(EARTH_RADIUS_KM / MIN_RADIUS_KM, 2);
+        const fPercent = Math.min(100, Math.max(3, (phys.forceNewton / maxForce) * 100));
+        gravityBar.style.width = `${fPercent}%`;
+
+        // Velocity readouts
+        velocityValueText.textContent = `${phys.speedKms.toFixed(2)} km/s`;
+        const maxV = Math.sqrt(GM_KM3_S2 / MIN_RADIUS_KM);
+        const minV = Math.sqrt(GM_KM3_S2 / MAX_RADIUS_KM);
+        const vPercent = Math.min(100, Math.max(8, ((phys.speedKms - minV * 0.7) / (maxV - minV * 0.7)) * 100));
+        velocityBar.style.width = `${vPercent}%`;
+
+        // Period readouts
+        const pHoursStr = phys.periodHours.toFixed(1);
+        periodValueText.textContent = `${phys.periodHours.toFixed(2)} 時間`;
+        const maxT = GEO_PERIOD_HOURS * Math.pow(MAX_RADIUS_KM / GEO_RADIUS_KM, 1.5);
+        const tPercent = Math.min(100, Math.max(4, (phys.periodHours / maxT) * 100));
+        periodBar.style.width = `${tPercent}%`;
+
+        // Top HUD Period Indicator
+        hudPeriodText.textContent = `${pHoursStr} 時間`;
+        const logRatio = Math.log(phys.periodHours / GEO_PERIOD_HOURS) / Math.log(2.8);
+        const pointerPct = Math.min(97, Math.max(3, 50 + logRatio * 46));
+        meterPointer.style.left = `${pointerPct}%`;
+
+        // Geostationary Achievement state
+        if (phys.isGeo) {
+          periodCard.classList.add('geo-achieved');
+          geoBanner.classList.add('visible');
+          if (!state.wasGeoAchieved) {
+            const { cx, cy } = getCenter();
+            const rPx = state.radiusKm * getScalePxPerKm();
+            const satX = cx + rPx * Math.cos(state.angleRad);
+            const satY = cy + rPx * Math.sin(state.angleRad);
+            spawnCelebrationParticles(satX, satY);
+          }
+          state.wasGeoAchieved = true;
+        } else {
+          periodCard.classList.remove('geo-achieved');
+          geoBanner.classList.remove('visible');
+          state.wasGeoAchieved = false;
+        }
+      }
+
+      function setRadiusKm(newRadiusKm, snapToGeo = true) {
+        let clamped = Math.max(MIN_RADIUS_KM, Math.min(MAX_RADIUS_KM, newRadiusKm));
+        if (snapToGeo && Math.abs(clamped - GEO_RADIUS_KM) <= 55) {
+          clamped = GEO_RADIUS_KM;
+        }
+        state.radiusKm = clamped;
+        state.earthAngleRad = state.angleRad;
+        updateUI();
+      }
+
+      // =========================================================
+      // Drawing Helpers
+      // =========================================================
+      function drawArrow(ctx, x1, y1, x2, y2, color, lineWidth = 3.5, label = '') {
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const len = Math.hypot(dx, dy);
+        if (len < 4) return;
+
+        const angle = Math.atan2(dy, dx);
+        const headLen = Math.min(14, Math.max(8, len * 0.28));
+
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = lineWidth;
+        ctx.lineCap = 'round';
+
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2 - headLen * 0.7 * Math.cos(angle), y2 - headLen * 0.7 * Math.sin(angle));
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(
+          x2 - headLen * Math.cos(angle - Math.PI / 6),
+          y2 - headLen * Math.sin(angle - Math.PI / 6)
+        );
+        ctx.lineTo(
+          x2 - headLen * Math.cos(angle + Math.PI / 6),
+          y2 - headLen * Math.sin(angle + Math.PI / 6)
+        );
+        ctx.closePath();
+        ctx.fill();
+
+        if (label) {
+          ctx.font = 'bold 13px "Meiryo", sans-serif';
+          ctx.shadowColor = 'rgba(0,0,0,0.9)';
+          ctx.shadowBlur = 4;
+          const labelOffset = 16;
+          const lx = x2 + Math.cos(angle) * labelOffset;
+          const ly = y2 + Math.sin(angle) * labelOffset;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(label, lx, ly);
+        }
+        ctx.restore();
+      }
+
+      // Draw Realistic Rotating Earth (North Pole View) + Person on Surface
+      function drawContinentPolygon(ctx, r, pts) {
+        ctx.beginPath();
+        for (let i = 0; i < pts.length; i++) {
+          const px = pts[i][0] * r;
+          const py = pts[i][1] * r;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      function drawEarth(ctx, cx, cy, earthRadiusPx, earthAngleRad, isGeo) {
+        const r = earthRadiusPx;
+
+        // 1. Outer Atmosphere Halo
+        ctx.save();
+        const haloGrad = ctx.createRadialGradient(cx, cy, r * 0.9, cx, cy, r * 1.38);
+        haloGrad.addColorStop(0, 'rgba(65, 165, 255, 0.42)');
+        haloGrad.addColorStop(0.5, 'rgba(40, 120, 240, 0.14)');
+        haloGrad.addColorStop(1, 'rgba(20, 80, 200, 0)');
+        ctx.fillStyle = haloGrad;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r * 1.38, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // 2. Globe Clipped Layer (Ocean + Rotating Continents + Clouds + 3D Shading)
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.clip();
+
+        // Deep Ocean Base
+        const oceanGrad = ctx.createRadialGradient(
+          cx - r * 0.25, cy - r * 0.25, r * 0.05,
+          cx, cy, r
+        );
+        oceanGrad.addColorStop(0, '#1e6bd6');
+        oceanGrad.addColorStop(0.55, '#0f418c');
+        oceanGrad.addColorStop(0.88, '#082556');
+        oceanGrad.addColorStop(1, '#041433');
+        ctx.fillStyle = oceanGrad;
+        ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+
+        // Rotate coordinate system with Earth's 24h rotation
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(earthAngleRad);
+
+        // Subtle Longitude & Latitude Grid Lines (helps visualize rotation)
+        ctx.strokeStyle = 'rgba(130, 195, 255, 0.16)';
+        ctx.lineWidth = Math.max(0.7, r * 0.018);
+        for (let i = 0; i < 6; i++) {
+          const a = (i * Math.PI) / 6;
+          ctx.beginPath();
+          ctx.moveTo(-r * Math.cos(a), -r * Math.sin(a));
+          ctx.lineTo(r * Math.cos(a), r * Math.sin(a));
+          ctx.stroke();
+        }
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.38, 0, Math.PI * 2);
+        ctx.arc(0, 0, r * 0.72, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Coastal shallow water glow around landmasses
+        ctx.fillStyle = 'rgba(45, 165, 220, 0.32)';
+        ctx.beginPath();
+        ctx.ellipse(r * 0.28, -r * 0.08, r * 0.48, r * 0.34, 0.2, 0, Math.PI * 2);
+        ctx.ellipse(-r * 0.36, -r * 0.22, r * 0.36, r * 0.26, -0.4, 0, Math.PI * 2);
+        ctx.ellipse(-r * 0.12, r * 0.48, r * 0.32, r * 0.24, 0.3, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Eurasia Continent (positioned toward +X so person at angle 0 stands near Japan/East Asia)
+        ctx.fillStyle = '#3b8c47';
+        drawContinentPolygon(ctx, r, [
+          [0.12, -0.12], [0.22, -0.38], [0.42, -0.48], [0.64, -0.36],
+          [0.78, -0.16], [0.84, 0.04], [0.72, 0.22], [0.54, 0.34],
+          [0.36, 0.28], [0.24, 0.36], [0.14, 0.18], [0.08, 0.02]
+        ]);
+
+        // Japanese Archipelago near the +X coast (right below the person!)
+        ctx.fillStyle = '#52b758';
+        drawContinentPolygon(ctx, r, [
+          [0.86, -0.08], [0.93, -0.02], [0.91, 0.11], [0.84, 0.06]
+        ]);
+
+        // Eurasia interior highlands / desert tint
+        ctx.fillStyle = '#8fa357';
+        drawContinentPolygon(ctx, r, [
+          [0.32, -0.22], [0.52, -0.28], [0.66, -0.12], [0.58, 0.10], [0.36, 0.08]
+        ]);
+
+        // Africa / Arabian Peninsula
+        ctx.fillStyle = '#c29b53';
+        drawContinentPolygon(ctx, r, [
+          [0.02, 0.24], [0.22, 0.32], [0.32, 0.56], [0.16, 0.86],
+          [-0.12, 0.84], [-0.26, 0.58], [-0.14, 0.34]
+        ]);
+        ctx.fillStyle = '#3b8c47';
+        drawContinentPolygon(ctx, r, [
+          [-0.08, 0.54], [0.16, 0.58], [0.12, 0.82], [-0.10, 0.78]
+        ]);
+
+        // North America
+        ctx.fillStyle = '#3f9149';
+        drawContinentPolygon(ctx, r, [
+          [-0.18, -0.18], [-0.34, -0.46], [-0.62, -0.52], [-0.82, -0.32],
+          [-0.84, -0.04], [-0.66, 0.16], [-0.46, 0.22], [-0.36, 0.04]
+        ]);
+        ctx.fillStyle = '#7c9952';
+        drawContinentPolygon(ctx, r, [
+          [-0.45, -0.32], [-0.68, -0.34], [-0.72, -0.10], [-0.52, -0.04]
+        ]);
+
+        // Greenland & Arctic Islands
+        ctx.fillStyle = '#dcebf7';
+        drawContinentPolygon(ctx, r, [
+          [-0.06, -0.22], [0.06, -0.36], [-0.04, -0.52], [-0.18, -0.40]
+        ]);
+
+        // North Pole Ice Cap
+        const iceGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 0.24);
+        iceGrad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+        iceGrad.addColorStop(0.7, 'rgba(225, 242, 255, 0.8)');
+        iceGrad.addColorStop(1, 'rgba(200, 230, 255, 0)');
+        ctx.fillStyle = iceGrad;
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.24, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Swirling Cloud Layer (rotates with Earth)
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.42)';
+        ctx.lineCap = 'round';
+        ctx.lineWidth = Math.max(1.4, r * 0.055);
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.48, -0.4, 0.9);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.68, 1.5, 2.8);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.58, 3.4, 4.7);
+        ctx.stroke();
+
+        ctx.restore(); // end Earth rotation transform
+
+        // Fixed 3D Spherical Lighting & Inner Atmosphere Limb
+        const shadeGrad = ctx.createRadialGradient(
+          cx - r * 0.32, cy - r * 0.32, r * 0.1,
+          cx, cy, r
+        );
+        shadeGrad.addColorStop(0, 'rgba(255, 255, 255, 0.18)');
+        shadeGrad.addColorStop(0.45, 'rgba(0, 0, 0, 0)');
+        shadeGrad.addColorStop(0.82, 'rgba(0, 10, 30, 0.35)');
+        shadeGrad.addColorStop(1, 'rgba(60, 155, 255, 0.45)');
+        ctx.fillStyle = shadeGrad;
+        ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+
+        ctx.restore(); // end Globe clip
+
+        // Crisp Atmosphere Rim
+        ctx.save();
+        ctx.strokeStyle = 'rgba(120, 195, 255, 0.72)';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        // 3. Draw Person Illustration Standing on Earth's Surface (rotates with Earth)
+        drawPersonOnEarth(ctx, cx, cy, r, earthAngleRad, isGeo);
+      }
+
+      function drawPersonOnEarth(ctx, cx, cy, earthRadiusPx, earthAngleRad, isGeo) {
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(earthAngleRad);
+        // Move to Earth's surface at +X; person stands radially outward (+X is "up" for the person)
+        ctx.translate(earthRadiusPx, 0);
+
+        const h = Math.max(18, Math.min(28, earthRadiusPx * 0.46)); // total height of person in px
+        const s = h / 22; // unit scale factor
+
+        // Small ground pad under feet
+        ctx.fillStyle = isGeo ? '#ffd700' : '#72efdd';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 2 * s, 5.5 * s, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Dark halo outline for high visibility against stars/vectors
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // Legs (from x=0..8s)
+        ctx.strokeStyle = '#0b132b';
+        ctx.lineWidth = 4.2 * s;
+        ctx.beginPath();
+        ctx.moveTo(0.5 * s, -2.5 * s);
+        ctx.lineTo(8 * s, -1.2 * s);
+        ctx.moveTo(0.5 * s, 2.5 * s);
+        ctx.lineTo(8 * s, 1.2 * s);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#e0fbfc';
+        ctx.lineWidth = 2.4 * s;
+        ctx.beginPath();
+        ctx.moveTo(0.5 * s, -2.5 * s);
+        ctx.lineTo(8 * s, -1.2 * s);
+        ctx.moveTo(0.5 * s, 2.5 * s);
+        ctx.lineTo(8 * s, 1.2 * s);
+        ctx.stroke();
+
+        // Arms (waving/looking up toward the sky)
+        ctx.strokeStyle = '#0b132b';
+        ctx.lineWidth = 4.0 * s;
+        ctx.beginPath();
+        ctx.moveTo(13 * s, -2.5 * s);
+        ctx.lineTo(17.5 * s, -6.5 * s);
+        ctx.moveTo(13 * s, 2.5 * s);
+        ctx.lineTo(17.5 * s, 6.5 * s);
+        ctx.stroke();
+
+        ctx.strokeStyle = isGeo ? '#ffd700' : '#ff9f1c';
+        ctx.lineWidth = 2.3 * s;
+        ctx.beginPath();
+        ctx.moveTo(13 * s, -2.5 * s);
+        ctx.lineTo(17.5 * s, -6.5 * s);
+        ctx.moveTo(13 * s, 2.5 * s);
+        ctx.lineTo(17.5 * s, 6.5 * s);
+        ctx.stroke();
+
+        // Torso (shirt)
+        ctx.fillStyle = isGeo ? '#ffd700' : '#ff9f1c';
+        ctx.strokeStyle = '#0b132b';
+        ctx.lineWidth = 1.4 * s;
+        ctx.beginPath();
+        ctx.roundRect(7.5 * s, -3.4 * s, 7.2 * s, 6.8 * s, 2 * s);
+        ctx.fill();
+        ctx.stroke();
+
+        // Head
+        ctx.fillStyle = '#ffe5d9';
+        ctx.strokeStyle = '#0b132b';
+        ctx.lineWidth = 1.5 * s;
+        ctx.beginPath();
+        ctx.arc(18.5 * s, 0, 3.6 * s, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.restore();
+      }
+
+      // Draw Satellite Icon
+      function drawSatellite(ctx, x, y, angleRad, isGeo, isHoveredOrDragged) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angleRad);
+
+        if (isHoveredOrDragged || isGeo) {
+          ctx.beginPath();
+          ctx.arc(0, 0, isHoveredOrDragged ? 22 : 18, 0, Math.PI * 2);
+          ctx.strokeStyle = isGeo ? 'rgba(255, 215, 0, 0.85)' : 'rgba(120, 200, 255, 0.75)';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([4, 3]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        ctx.fillStyle = '#2b7de9';
+        ctx.strokeStyle = '#a8d1ff';
+        ctx.lineWidth = 1.2;
+
+        ctx.fillRect(-18, -5, 11, 10);
+        ctx.strokeRect(-18, -5, 11, 10);
+
+        ctx.fillRect(7, -5, 11, 10);
+        ctx.strokeRect(7, -5, 11, 10);
+
+        ctx.beginPath();
+        ctx.moveTo(-12.5, -5);
+        ctx.lineTo(-12.5, 5);
+        ctx.moveTo(12.5, -5);
+        ctx.lineTo(12.5, 5);
+        ctx.stroke();
+
+        ctx.fillStyle = isGeo ? '#ffd700' : '#e2e8f0';
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 1.5;
+        ctx.fillRect(-5, -6, 10, 12);
+        ctx.strokeRect(-5, -6, 10, 12);
+
+        ctx.beginPath();
+        ctx.arc(-6, 0, 4, -Math.PI / 2, Math.PI / 2, true);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.8;
+        ctx.stroke();
+
+        ctx.restore();
+      }
+
+      // =========================================================
+      // Main Render Function
+      // =========================================================
+      let isHoveringSat = false;
+
+      function render() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const { cx, cy } = getCenter();
+        const scale = getScalePxPerKm();
+        const phys = computePhysics(state.radiusKm);
+
+        // 1. Background Stars
+        ctx.save();
+        for (const s of stars) {
+          ctx.fillStyle = `rgba(255, 255, 255, ${s.alpha})`;
+          ctx.beginPath();
+          ctx.arc(s.xRatio * canvas.width, s.yRatio * canvas.height, s.size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+
+        // 2. Optional Grid (10,000 km spacing)
+        if (state.showGrid) {
+          ctx.save();
+          const stepPx = 10000 * scale;
+          ctx.strokeStyle = 'rgba(130, 165, 220, 0.16)';
+          ctx.lineWidth = 1;
+
+          for (let x = cx % stepPx; x < canvas.width; x += stepPx) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, canvas.height);
+            ctx.stroke();
+          }
+          for (let y = cy % stepPx; y < canvas.height; y += stepPx) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(canvas.width, y);
+            ctx.stroke();
+          }
+
+          ctx.fillStyle = 'rgba(170, 200, 245, 0.7)';
+          ctx.font = '11px "Meiryo", sans-serif';
+          ctx.fillText('1マス = 10,000 km', 18, canvas.height - 90);
+          ctx.restore();
+        }
+
+        // 3. Optional Geostationary Guide Ring (Hint)
+        if (state.showGeoGuide) {
+          const geoPx = GEO_RADIUS_KM * scale;
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(cx, cy, geoPx, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(255, 215, 0, 0.42)';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([8, 6]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          ctx.fillStyle = 'rgba(255, 215, 0, 0.85)';
+          ctx.font = 'bold 12px "Meiryo", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('目標：静止軌道 (r = 42,164 km / 周期 24.0h)', cx, cy - geoPx - 8);
+          ctx.restore();
+        }
+
+        // 4. Current Circular Orbit Path
+        const orbitRadiusPx = state.radiusKm * scale;
+        if (state.showPath) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(cx, cy, orbitRadiusPx, 0, Math.PI * 2);
+
+          if (phys.isGeo) {
+            const pulseAlpha = 0.75 + 0.25 * Math.sin(state.pulsePhase * 4);
+            ctx.strokeStyle = `rgba(255, 215, 0, ${pulseAlpha})`;
+            ctx.lineWidth = 3.5;
+            ctx.shadowColor = '#ffd700';
+            ctx.shadowBlur = 15;
+          } else {
+            ctx.strokeStyle = 'rgba(180, 210, 255, 0.48)';
+            ctx.lineWidth = 2;
+          }
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // 5. Draw Earth at Center (rotating once every 24h + person on ground)
+        const earthRadiusPx = Math.max(8, EARTH_RADIUS_KM * scale);
+        drawEarth(ctx, cx, cy, earthRadiusPx, state.earthAngleRad, phys.isGeo);
+
+        // Satellite Coordinates
+        const satX = cx + orbitRadiusPx * Math.cos(state.angleRad);
+        const satY = cy + orbitRadiusPx * Math.sin(state.angleRad);
+
+        // 6. Vectors: Gravitational Force (Blue) & Velocity (Green)
+        const inwardAngle = state.angleRad + Math.PI;
+        const tangentAngle = state.angleRad - Math.PI / 2;
+
+        if (state.showGravity) {
+          const fVisualLen = Math.min(220, Math.max(24, 48 * Math.pow(GEO_RADIUS_KM / state.radiusKm, 1.35)));
+          const gx = satX + fVisualLen * Math.cos(inwardAngle);
+          const gy = satY + fVisualLen * Math.sin(inwardAngle);
+          drawArrow(ctx, satX, satY, gx, gy, '#3b9eff', 4, '万有引力 F');
+        }
+
+        if (state.showVelocity) {
+          const vVisualLen = 68 * Math.sqrt(GEO_RADIUS_KM / state.radiusKm);
+          const vx = satX + vVisualLen * Math.cos(tangentAngle);
+          const vy = satY + vVisualLen * Math.sin(tangentAngle);
+          drawArrow(ctx, satX, satY, vx, vy, '#38e54d', 4, `速度 v (${phys.speedKms.toFixed(2)} km/s)`);
+        }
+
+        // 7. Draw Satellite
+        drawSatellite(ctx, satX, satY, state.angleRad, phys.isGeo, state.isDraggingSat || isHoveringSat);
+
+        // Satellite Callout Label
+        ctx.save();
+        const labelX = satX + 26 * Math.cos(state.angleRad - 0.5);
+        const labelY = satY + 26 * Math.sin(state.angleRad - 0.5) - 14;
+        ctx.font = 'bold 13px "Meiryo", sans-serif';
+        ctx.fillStyle = phys.isGeo ? '#ffd700' : '#e2e8f0';
+        ctx.shadowColor = 'rgba(0,0,0,0.95)';
+        ctx.shadowBlur = 4;
+        ctx.fillText(phys.isGeo ? '🛰️ 静止衛星 (周期24.0h)' : '人工衛星', labelX, labelY);
+        ctx.restore();
+
+        // 8. Celebration Particles
+        if (state.celebrationParticles.length > 0) {
+          ctx.save();
+          for (let i = state.celebrationParticles.length - 1; i >= 0; i--) {
+            const p = state.celebrationParticles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.life -= 0.022;
+            if (p.life <= 0) {
+              state.celebrationParticles.splice(i, 1);
+              continue;
+            }
+            ctx.globalAlpha = p.life;
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.restore();
+        }
+      }
+
+      // =========================================================
+      // Animation Loop
+      // =========================================================
+      let lastTimestamp = performance.now();
+
+      function tick(now) {
+        const dtSec = Math.min(0.1, (now - lastTimestamp) / 1000);
+        lastTimestamp = now;
+
+        state.pulsePhase += dtSec;
+
+        if (state.isPlaying && !state.isDraggingSat) {
+          const phys = computePhysics(state.radiusKm);
+          const simHoursDelta = dtSec * 3.0 * state.simSpeedMultiplier;
+
+          // 人工衛星の公転 (北極側から見て反時計回り、周期 T)
+          const orbitsDelta = simHoursDelta / phys.periodHours;
+          state.angleRad -= orbitsDelta * Math.PI * 2;
+
+          // 地球の自転 (北極側から見て反時計回り、24.0時間で1回転)
+          const earthRotationsDelta = simHoursDelta / GEO_PERIOD_HOURS;
+          state.earthAngleRad -= earthRotationsDelta * Math.PI * 2;
+        }
+
+        render();
+        requestAnimationFrame(tick);
+      }
+
+      // =========================================================
+      // Event Listeners (Canvas Drag, Sliders, Buttons)
+      // =========================================================
+      function resizeCanvas() {
+        const wrapper = document.getElementById('canvasWrapper');
+        canvas.width = wrapper.clientWidth;
+        canvas.height = wrapper.clientHeight;
+        render();
+      }
+
+      window.addEventListener('resize', resizeCanvas);
+
+      function getPointerPos(e) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top
+        };
+      }
+
+      canvas.addEventListener('pointerdown', (e) => {
+        const pos = getPointerPos(e);
+        const { cx, cy } = getCenter();
+        const scale = getScalePxPerKm();
+        const orbitRadiusPx = state.radiusKm * scale;
+        const satX = cx + orbitRadiusPx * Math.cos(state.angleRad);
+        const satY = cy + orbitRadiusPx * Math.sin(state.angleRad);
+
+        const distToSat = Math.hypot(pos.x - satX, pos.y - satY);
+        const distFromCenter = Math.hypot(pos.x - cx, pos.y - cy);
+        const distToOrbitRing = Math.abs(distFromCenter - orbitRadiusPx);
+
+        if (distToSat <= 38 || distToOrbitRing <= 16) {
+          state.isDraggingSat = true;
+          canvas.setPointerCapture(e.pointerId);
+          const newAngle = Math.atan2(pos.y - cy, pos.x - cx);
+          state.angleRad = newAngle;
+          setRadiusKm(distFromCenter / scale, true);
+        }
+      });
+
+      canvas.addEventListener('pointermove', (e) => {
+        const pos = getPointerPos(e);
+        const { cx, cy } = getCenter();
+        const scale = getScalePxPerKm();
+
+        if (state.isDraggingSat) {
+          const distFromCenter = Math.hypot(pos.x - cx, pos.y - cy);
+          state.angleRad = Math.atan2(pos.y - cy, pos.x - cx);
+          setRadiusKm(distFromCenter / scale, true);
+          canvas.style.cursor = 'grabbing';
+        } else {
+          const orbitRadiusPx = state.radiusKm * scale;
+          const satX = cx + orbitRadiusPx * Math.cos(state.angleRad);
+          const satY = cy + orbitRadiusPx * Math.sin(state.angleRad);
+          const distToSat = Math.hypot(pos.x - satX, pos.y - satY);
+          const distToOrbitRing = Math.abs(Math.hypot(pos.x - cx, pos.y - cy) - orbitRadiusPx);
+
+          isHoveringSat = distToSat <= 36 || distToOrbitRing <= 14;
+          canvas.style.cursor = isHoveringSat ? 'grab' : 'default';
+        }
+      });
+
+      canvas.addEventListener('pointerup', (e) => {
+        if (state.isDraggingSat) {
+          state.isDraggingSat = false;
+          canvas.releasePointerCapture(e.pointerId);
+          canvas.style.cursor = 'grab';
+        }
+      });
+
+      // Wheel zoom on canvas
+      canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const delta = e.deltaY < 0 ? 0.08 : -0.08;
+        state.zoom = Math.min(2.2, Math.max(0.45, state.zoom + delta));
+        zoomSlider.value = state.zoom.toFixed(2);
+      }, { passive: false });
+
+      // Radius Slider
+      radiusSlider.addEventListener('input', (e) => {
+        setRadiusKm(parseFloat(e.target.value), true);
+      });
+
+      // Fine-tune buttons
+      document.querySelectorAll('.tune-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const delta = parseFloat(btn.getAttribute('data-delta'));
+          const nextVal = state.radiusKm + delta;
+          if (Math.abs(nextVal - GEO_RADIUS_KM) <= Math.abs(delta) * 0.6) {
+            setRadiusKm(GEO_RADIUS_KM, false);
+          } else {
+            setRadiusKm(nextVal, false);
+          }
+        });
+      });
+
+      // Zoom controls
+      zoomSlider.addEventListener('input', (e) => {
+        state.zoom = parseFloat(e.target.value);
+      });
+      zoomInBtn.addEventListener('click', () => {
+        state.zoom = Math.min(2.2, state.zoom + 0.15);
+        zoomSlider.value = state.zoom.toFixed(2);
+      });
+      zoomOutBtn.addEventListener('click', () => {
+        state.zoom = Math.max(0.45, state.zoom - 0.15);
+        zoomSlider.value = state.zoom.toFixed(2);
+      });
+
+      // Checkboxes
+      document.getElementById('chkGravity').addEventListener('change', (e) => {
+        state.showGravity = e.target.checked;
+      });
+      document.getElementById('chkVelocity').addEventListener('change', (e) => {
+        state.showVelocity = e.target.checked;
+      });
+      document.getElementById('chkPath').addEventListener('change', (e) => {
+        state.showPath = e.target.checked;
+      });
+      document.getElementById('chkGrid').addEventListener('change', (e) => {
+        state.showGrid = e.target.checked;
+      });
+      document.getElementById('chkGeoGuide').addEventListener('change', (e) => {
+        state.showGeoGuide = e.target.checked;
+      });
+
+      // Speed Radio Buttons
+      document.querySelectorAll('input[name="simSpeed"]').forEach((radio) => {
+        radio.addEventListener('change', (e) => {
+          state.simSpeedMultiplier = parseFloat(e.target.value);
+        });
+      });
+
+      // Playback & Reset Buttons
+      playPauseBtn.addEventListener('click', () => {
+        state.isPlaying = !state.isPlaying;
+        playPauseBtn.textContent = state.isPlaying ? '⏸' : '▶';
+      });
+
+      resetAllBtn.addEventListener('click', () => {
+        state.radiusKm = INITIAL_RADIUS_KM;
+        state.angleRad = -Math.PI / 4;
+        state.earthAngleRad = -Math.PI / 4;
+        state.zoom = 1.0;
+        zoomSlider.value = '1.0';
+        state.isPlaying = true;
+        playPauseBtn.textContent = '⏸';
+        updateUI();
+      });
+
+      // Initialize
+      resizeCanvas();
+      updateUI();
+      requestAnimationFrame(tick);
+    })();
+  </script>
+</body>
+</html>
