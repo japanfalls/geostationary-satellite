@@ -601,9 +601,192 @@
         padding: 5px 8px;
       }
     }
+
+    /* 4-Digit Password Lock Screen Overlay */
+    .password-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: radial-gradient(circle at center, rgba(14, 24, 48, 0.96) 0%, rgba(4, 7, 15, 0.99) 100%);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      transition: opacity 0.35s ease, visibility 0.35s ease;
+    }
+
+    .password-overlay.unlocked {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .password-card {
+      background: rgba(20, 27, 45, 0.95);
+      border: 2px solid rgba(130, 175, 245, 0.4);
+      border-radius: 20px;
+      padding: 24px 28px;
+      width: 100%;
+      max-width: 360px;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.8);
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .password-icon {
+      font-size: 36px;
+      line-height: 1;
+    }
+
+    .password-title {
+      font-size: 18px;
+      font-weight: 800;
+      color: #f0f4ff;
+    }
+
+    .password-subtitle {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      margin-top: -6px;
+    }
+
+    .pin-slots {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin: 4px 0;
+    }
+
+    .pin-slot {
+      width: 52px;
+      height: 60px;
+      border-radius: 12px;
+      background: rgba(8, 12, 22, 0.85);
+      border: 2px solid rgba(140, 175, 230, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      font-weight: 800;
+      color: #ffffff;
+      font-variant-numeric: tabular-nums;
+      transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+    }
+
+    .pin-slot.active {
+      border-color: #4facfe;
+      box-shadow: 0 0 12px rgba(79, 172, 254, 0.45);
+    }
+
+    .pin-slot.filled {
+      border-color: #7ab8ff;
+    }
+
+    .pin-slot.error {
+      border-color: var(--color-danger);
+      box-shadow: 0 0 12px rgba(255, 107, 107, 0.5);
+    }
+
+    .pin-slot.success {
+      border-color: var(--color-velocity);
+      box-shadow: 0 0 14px rgba(56, 229, 77, 0.6);
+      color: var(--color-velocity);
+    }
+
+    @keyframes shakePin {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-8px); }
+      40%, 80% { transform: translateX(8px); }
+    }
+
+    .pin-slots.shake {
+      animation: shakePin 0.35s ease;
+    }
+
+    .password-msg {
+      min-height: 18px;
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--color-danger);
+    }
+
+    .keypad-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      width: 100%;
+      max-width: 260px;
+    }
+
+    .key-btn {
+      height: 50px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.08);
+      color: #f0f4ff;
+      font-size: 20px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.12s, transform 0.08s;
+    }
+
+    .key-btn:hover {
+      background: rgba(255, 255, 255, 0.16);
+    }
+
+    .key-btn:active {
+      transform: scale(0.94);
+      background: rgba(79, 172, 254, 0.35);
+    }
+
+    .key-btn.sub-key {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
   </style>
 </head>
 <body>
+  <!-- 4-Digit Password Lock Overlay -->
+  <div class="password-overlay" id="passwordOverlay">
+    <div class="password-card">
+      <div class="password-icon">🛰️</div>
+      <div class="password-title">人工衛星シミュレーター</div>
+      <div class="password-subtitle">4桁のパスワードを入力してください</div>
+
+      <div class="pin-slots" id="pinSlots">
+        <div class="pin-slot active"></div>
+        <div class="pin-slot"></div>
+        <div class="pin-slot"></div>
+        <div class="pin-slot"></div>
+      </div>
+
+      <div class="password-msg" id="passwordMsg"></div>
+
+      <div class="keypad-grid" id="keypadGrid">
+        <button type="button" class="key-btn" data-key="1">1</button>
+        <button type="button" class="key-btn" data-key="2">2</button>
+        <button type="button" class="key-btn" data-key="3">3</button>
+        <button type="button" class="key-btn" data-key="4">4</button>
+        <button type="button" class="key-btn" data-key="5">5</button>
+        <button type="button" class="key-btn" data-key="6">6</button>
+        <button type="button" class="key-btn" data-key="7">7</button>
+        <button type="button" class="key-btn" data-key="8">8</button>
+        <button type="button" class="key-btn" data-key="9">9</button>
+        <button type="button" class="key-btn sub-key" data-key="clear">クリア</button>
+        <button type="button" class="key-btn" data-key="0">0</button>
+        <button type="button" class="key-btn sub-key" data-key="back">⌫</button>
+      </div>
+    </div>
+  </div>
+
   <div class="simulator-container">
     <!-- Left/Main Interactive Space Canvas -->
     <div class="canvas-wrapper" id="canvasWrapper">
@@ -830,6 +1013,7 @@
       // State
       // =========================================================
       const state = {
+        isLocked: true,
         radiusKm: INITIAL_RADIUS_KM,
         angleRad: -Math.PI / 4,
         earthAngleRad: -Math.PI / 4,
@@ -1526,7 +1710,7 @@
 
         state.pulsePhase += dtSec;
 
-        if (state.isPlaying && !state.isDraggingSat) {
+        if (!state.isLocked && state.isPlaying && !state.isDraggingSat) {
           const phys = computePhysics(state.radiusKm);
           const simHoursDelta = dtSec * 3.0 * state.simSpeedMultiplier;
 
@@ -1692,6 +1876,95 @@
         state.isPlaying = true;
         playPauseBtn.textContent = '⏸';
         updateUI();
+      });
+
+      // =========================================================
+      // 4-Digit Password Gate ("5821")
+      // =========================================================
+      const PASSCODE = '5821';
+      let currentPin = '';
+      const passwordOverlay = document.getElementById('passwordOverlay');
+      const pinSlotsContainer = document.getElementById('pinSlots');
+      const pinSlotEls = Array.from(pinSlotsContainer.querySelectorAll('.pin-slot'));
+      const passwordMsg = document.getElementById('passwordMsg');
+
+      function renderPinSlots(status = '') {
+        pinSlotEls.forEach((slot, idx) => {
+          const ch = currentPin[idx] || '';
+          slot.textContent = ch;
+          slot.classList.remove('active', 'filled', 'error', 'success');
+          if (status === 'error') {
+            slot.classList.add('error');
+          } else if (status === 'success') {
+            slot.classList.add('success');
+          } else {
+            if (ch) slot.classList.add('filled');
+            if (idx === currentPin.length) slot.classList.add('active');
+          }
+        });
+      }
+
+      function handlePinInput(key) {
+        if (!state.isLocked) return;
+
+        if (key === 'clear') {
+          currentPin = '';
+          passwordMsg.textContent = '';
+          renderPinSlots();
+          return;
+        }
+
+        if (key === 'back') {
+          currentPin = currentPin.slice(0, -1);
+          passwordMsg.textContent = '';
+          renderPinSlots();
+          return;
+        }
+
+        if (/^[0-9]$/.test(key) && currentPin.length < 4) {
+          currentPin += key;
+          passwordMsg.textContent = '';
+          renderPinSlots();
+
+          if (currentPin.length === 4) {
+            if (currentPin === PASSCODE) {
+              renderPinSlots('success');
+              setTimeout(() => {
+                state.isLocked = false;
+                passwordOverlay.classList.add('unlocked');
+              }, 220);
+            } else {
+              renderPinSlots('error');
+              passwordMsg.textContent = 'パスワードが違います';
+              pinSlotsContainer.classList.remove('shake');
+              void pinSlotsContainer.offsetWidth;
+              pinSlotsContainer.classList.add('shake');
+              setTimeout(() => {
+                if (state.isLocked) {
+                  currentPin = '';
+                  renderPinSlots();
+                }
+              }, 550);
+            }
+          }
+        }
+      }
+
+      document.getElementById('keypadGrid').addEventListener('click', (e) => {
+        const btn = e.target.closest('.key-btn');
+        if (!btn) return;
+        handlePinInput(btn.getAttribute('data-key'));
+      });
+
+      window.addEventListener('keydown', (e) => {
+        if (!state.isLocked) return;
+        if (e.key >= '0' && e.key <= '9') {
+          handlePinInput(e.key);
+        } else if (e.key === 'Backspace') {
+          handlePinInput('back');
+        } else if (e.key === 'Escape' || e.key === 'Delete') {
+          handlePinInput('clear');
+        }
       });
 
       // Initialize
