@@ -111,19 +111,21 @@
     }
 
     .zoom-slider-wrap {
+      width: 28px;
       height: 95px;
       display: flex;
       align-items: center;
       justify-content: center;
+      position: relative;
     }
 
     .zoom-slider {
-      writing-mode: bt-lr;
-      -webkit-appearance: slider-vertical;
-      width: 8px;
-      height: 85px;
+      width: 85px;
+      height: 24px;
+      transform: rotate(-90deg);
       cursor: pointer;
       accent-color: #7ab8ff;
+      touch-action: none;
     }
 
     /* Top Instruction & Target Banner */
@@ -796,7 +798,7 @@
       <div class="zoom-control" title="表示倍率の変更">
         <button class="zoom-btn" id="zoomInBtn" aria-label="拡大">＋</button>
         <div class="zoom-slider-wrap">
-          <input type="range" id="zoomSlider" class="zoom-slider" min="0.45" max="2.2" step="0.05" value="1.0" />
+          <input type="range" id="zoomSlider" class="zoom-slider" min="0.35" max="2.8" step="0.02" value="1.0" />
         </div>
         <button class="zoom-btn" id="zoomOutBtn" aria-label="縮小">－</button>
       </div>
@@ -1747,8 +1749,39 @@
         };
       }
 
+      const MIN_ZOOM = 0.35;
+      const MAX_ZOOM = 2.8;
+
+      function setZoom(newZoom) {
+        state.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, newZoom));
+        zoomSlider.value = state.zoom.toFixed(2);
+      }
+
+      // Multi-touch Pinch-to-Zoom state (for iPad / Tablets)
+      const activePointers = new Map();
+      let isPinching = false;
+      let pinchStartDist = 0;
+      let pinchStartZoom = 1.0;
+
+      function getTwoPointerDist() {
+        const pts = Array.from(activePointers.values());
+        if (pts.length < 2) return 0;
+        return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      }
+
       canvas.addEventListener('pointerdown', (e) => {
         const pos = getPointerPos(e);
+        activePointers.set(e.pointerId, pos);
+
+        // 2本指タッチになったらピンチズームモードへ切り替え（衛星ドラッグは解除）
+        if (activePointers.size >= 2) {
+          isPinching = true;
+          state.isDraggingSat = false;
+          pinchStartDist = getTwoPointerDist();
+          pinchStartZoom = state.zoom;
+          return;
+        }
+
         const { cx, cy } = getCenter();
         const scale = getScalePxPerKm();
         const orbitRadiusPx = state.radiusKm * scale;
@@ -1770,10 +1803,24 @@
 
       canvas.addEventListener('pointermove', (e) => {
         const pos = getPointerPos(e);
+        if (activePointers.has(e.pointerId)) {
+          activePointers.set(e.pointerId, pos);
+        }
+
+        // 2本指ピンチによる拡大・縮小
+        if (isPinching && activePointers.size >= 2) {
+          const currentDist = getTwoPointerDist();
+          if (pinchStartDist > 10 && currentDist > 10) {
+            const ratio = currentDist / pinchStartDist;
+            setZoom(pinchStartZoom * ratio);
+          }
+          return;
+        }
+
         const { cx, cy } = getCenter();
         const scale = getScalePxPerKm();
 
-        if (state.isDraggingSat) {
+        if (state.isDraggingSat && !isPinching) {
           const distFromCenter = Math.hypot(pos.x - cx, pos.y - cy);
           state.angleRad = Math.atan2(pos.y - cy, pos.x - cx);
           setRadiusKm(distFromCenter / scale, true);
@@ -1790,20 +1837,51 @@
         }
       });
 
-      canvas.addEventListener('pointerup', (e) => {
-        if (state.isDraggingSat) {
+      function handlePointerUpOrCancel(e) {
+        activePointers.delete(e.pointerId);
+        if (activePointers.size < 2) {
+          isPinching = false;
+        }
+        if (state.isDraggingSat && activePointers.size === 0) {
           state.isDraggingSat = false;
-          canvas.releasePointerCapture(e.pointerId);
+          try {
+            canvas.releasePointerCapture(e.pointerId);
+          } catch (_) {}
           canvas.style.cursor = 'grab';
         }
+      }
+
+      canvas.addEventListener('pointerup', handlePointerUpOrCancel);
+      canvas.addEventListener('pointercancel', handlePointerUpOrCancel);
+      canvas.addEventListener('pointerleave', (e) => {
+        if (e.pointerType !== 'mouse') {
+          handlePointerUpOrCancel(e);
+        }
       });
+
+      // iOS / iPadOS Safari のブラウザ全体のネイティブ拡大ロックを防ぎ、シミュレーター内の拡大・縮小に連動させる
+      let gestureBaseZoom = 1.0;
+      document.addEventListener('gesturestart', (e) => {
+        e.preventDefault();
+        gestureBaseZoom = state.zoom;
+      }, { passive: false });
+
+      document.addEventListener('gesturechange', (e) => {
+        e.preventDefault();
+        if (e.scale && !isPinching) {
+          setZoom(gestureBaseZoom * e.scale);
+        }
+      }, { passive: false });
+
+      document.addEventListener('gestureend', (e) => {
+        e.preventDefault();
+      }, { passive: false });
 
       // Wheel zoom on canvas
       canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
         const delta = e.deltaY < 0 ? 0.08 : -0.08;
-        state.zoom = Math.min(2.2, Math.max(0.45, state.zoom + delta));
-        zoomSlider.value = state.zoom.toFixed(2);
+        setZoom(state.zoom + delta);
       }, { passive: false });
 
       // Radius Slider
@@ -1826,15 +1904,13 @@
 
       // Zoom controls
       zoomSlider.addEventListener('input', (e) => {
-        state.zoom = parseFloat(e.target.value);
+        setZoom(parseFloat(e.target.value));
       });
       zoomInBtn.addEventListener('click', () => {
-        state.zoom = Math.min(2.2, state.zoom + 0.15);
-        zoomSlider.value = state.zoom.toFixed(2);
+        setZoom(state.zoom + 0.15);
       });
       zoomOutBtn.addEventListener('click', () => {
-        state.zoom = Math.max(0.45, state.zoom - 0.15);
-        zoomSlider.value = state.zoom.toFixed(2);
+        setZoom(state.zoom - 0.15);
       });
 
       // Checkboxes
